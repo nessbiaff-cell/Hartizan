@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hartizan – Devis et factures</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+<style>
+:root{--ink:#0f1b2d;--bg:#eceff3;--y:#f2b705;--card:#fff;--line:#c9d0da;--mute:#5b6676}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;font:16px/1.4 "Trebuchet MS",system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+main{max-width:520px;margin:0 auto;padding:16px 16px 48px}
+h1{font-size:26px;margin:12px 0 4px;letter-spacing:-.5px}
+h2{font-size:18px;margin:18px 0 8px}
+p{margin:4px 0}
+.mute{color:var(--mute);font-size:14px}
+input,select{width:100%;font:inherit;padding:12px;margin:4px 0;border:2px solid var(--line);border-radius:4px;background:#fff;color:var(--ink)}
+input:focus,select:focus,button:focus-visible{outline:3px solid var(--y);outline-offset:1px}
+button{font:inherit;font-weight:700;padding:12px 14px;margin:4px 0;border:2px solid var(--ink);border-radius:4px;background:var(--y);color:var(--ink);cursor:pointer;width:100%}
+button.s{background:#fff}
+button.k{background:var(--ink);color:#fff}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.tabs{display:flex;gap:0;margin:12px 0;border:2px solid var(--ink);border-radius:4px;overflow:hidden}
+.tabs button{margin:0;border:0;border-radius:0;background:#fff;flex:1}
+.tabs button.on{background:var(--ink);color:#fff}
+.card{background:var(--card);border:2px solid var(--line);border-left:8px solid var(--y);border-radius:4px;padding:12px;margin:10px 0}
+.card.f{border-left-color:var(--ink)}
+.card .top{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.tot{font-size:22px;font-weight:700;margin:12px 0}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.acts button{padding:9px;font-size:14px}
+.err{color:#b00020;font-weight:700;min-height:22px}
+a.l{color:var(--ink);font-weight:700;cursor:pointer;text-decoration:underline}
+#print{display:none;font-family:Arial,sans-serif;color:#000}
+#print table{width:100%;border-collapse:collapse;margin:16px 0}
+#print th,#print td{border-bottom:1px solid #999;padding:6px;text-align:left}
+#print td.r,#print th.r{text-align:right}
+@media print{body>*:not(#print){display:none!important}#print{display:block!important}}
+</style>
+</head>
+<body>
+<main id="auth" hidden>
+  <h1>Hartizan</h1>
+  <p class="mute">Faites vos devis et factures depuis votre téléphone.</p>
+  <h2 id="atitle">Connexion</h2>
+  <input id="anom" placeholder="Votre nom ou nom d'entreprise" hidden>
+  <input id="amail" type="email" placeholder="E-mail" autocomplete="email">
+  <input id="apass" type="password" placeholder="Mot de passe (6 caractères minimum)" autocomplete="current-password">
+  <p class="err" id="aerr"></p>
+  <button id="ago">Se connecter</button>
+  <p class="mute" style="margin-top:12px"><a class="l" id="aswap">Créer un compte</a></p>
+</main>
+
+<main id="app" hidden>
+  <h1>Hartizan</h1>
+  <div class="tabs">
+    <button data-v="list" class="on">Mes documents</button>
+    <button data-v="new">Nouveau</button>
+    <button data-v="prof">Profil</button>
+  </div>
+
+  <section id="v-list"></section>
+
+  <section id="v-new" hidden>
+    <p class="mute" id="plan"></p>
+    <div class="card" id="paywall" hidden>
+      <p><b>Limite gratuite atteinte.</b></p>
+      <p class="mute">Abonnez-vous pour 1 500 FCFA par mois : documents illimités. Paiement par Orange Money, activation rapide.</p>
+      <button class="subbtn">S'abonner sur WhatsApp</button>
+    </div>
+    <select id="type"><option value="devis">Devis</option><option value="facture">Facture</option></select>
+    <input id="cn" placeholder="Nom du client">
+    <input id="ct" type="tel" inputmode="tel" placeholder="Téléphone du client (WhatsApp)">
+    <h2>Lignes</h2>
+    <div id="lines"></div>
+    <button class="s" id="addl">Ajouter une ligne</button>
+    <p class="tot" id="tot"></p>
+    <button id="save">Enregistrer</button>
+  </section>
+
+  <section id="v-prof" hidden>
+    <p class="mute">Ces informations apparaissent en haut de vos devis et factures.</p>
+    <input id="pn" placeholder="Nom ou entreprise">
+    <input id="pm" placeholder="Métier (ex. électricien)">
+    <input id="pt" type="tel" inputmode="tel" placeholder="Votre téléphone">
+    <button id="psave">Enregistrer le profil</button>
+    <p class="mute" id="pmsg"></p>
+    <h2>Abonnement</h2>
+    <p class="mute" id="pplan"></p>
+    <button class="subbtn">S'abonner sur WhatsApp</button>
+    <button class="s" id="out" style="margin-top:24px">Se déconnecter</button>
+  </section>
+</main>
+
+<div id="print"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-firestore.js";
+
+const app = initializeApp({
+  apiKey: "AIzaSyDCqL0u_rhSG-zuv4LuPMcM2dDEK0kbtMA",
+  authDomain: "hartizan-64b30.firebaseapp.com",
+  projectId: "hartizan-64b30",
+  storageBucket: "hartizan-64b30.firebasestorage.app",
+  messagingSenderId: "1054303670998",
+  appId: "1:1054303670998:web:26ba461f79d2e9a444af77"
+});
+const auth = getAuth(app), db = getFirestore(app);
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = n => Math.round(n).toLocaleString("fr-FR") + " FCFA";
+const total = l => l.reduce((s, x) => s + x.q * x.p, 0);
+const dateOf = d => d.createdAt?.toDate?.().toLocaleDateString("fr-FR") || "";
+const num = t => (t === "devis" ? "DEV-" : "FAC-") + String(docs.filter(d => d.type === t).length + 1).padStart(4, "0");
+
+const WA = "22673306209", PRIX = "1 500 FCFA", LIMITE = 3;
+const today = () => new Date().toISOString().slice(0, 10);
+const abonne = () => !!profile.abonneJusqu && profile.abonneJusqu >= today();
+const ceMois = () => {
+  const n = new Date();
+  return docs.filter(d => {
+    const t = d.createdAt?.toDate?.() || n;
+    return t.getMonth() === n.getMonth() && t.getFullYear() === n.getFullYear();
+  }).length;
+};
+function updPlan() {
+  const ok = abonne(), n = ceMois(), bloque = !ok && n >= LIMITE;
+  const txt = ok
+    ? "Abonnement actif jusqu'au " + new Date(profile.abonneJusqu).toLocaleDateString("fr-FR") + "."
+    : `Gratuit : ${n} sur ${LIMITE} documents utilisés ce mois-ci.`;
+  $("#plan").textContent = txt;
+  $("#pplan").textContent = txt;
+  $("#paywall").hidden = !bloque;
+  document.querySelectorAll(".subbtn").forEach(b => b.hidden = ok);
+  return bloque;
+}
+document.querySelectorAll(".subbtn").forEach(b => b.onclick = () =>
+  window.open(`https://wa.me/${WA}?text=` + encodeURIComponent(
+    `Bonjour, je veux m'abonner à Hartizan (${PRIX} par mois).\nMon e-mail : ${user.email}`), "_blank"));
+
+let user, profile = {}, docs = [], unsub = null, signup = false;
+let lines = [{ d: "", q: 1, p: 0 }];
+
+/* ---------- Connexion ---------- */
+const errs = {
+  "auth/invalid-credential": "E-mail ou mot de passe incorrect.",
+  "auth/email-already-in-use": "Cet e-mail a déjà un compte. Connectez-vous.",
+  "auth/weak-password": "Le mot de passe doit avoir au moins 6 caractères.",
+  "auth/invalid-email": "Cet e-mail n'est pas valide.",
+  "auth/network-request-failed": "Pas de connexion internet."
+};
+function modeAuth() {
+  $("#atitle").textContent = signup ? "Créer un compte" : "Connexion";
+  $("#ago").textContent = signup ? "Créer mon compte" : "Se connecter";
+  $("#aswap").textContent = signup ? "J'ai déjà un compte" : "Créer un compte";
+  $("#anom").hidden = !signup;
+  $("#aerr").textContent = "";
+}
+$("#aswap").onclick = () => { signup = !signup; modeAuth(); };
+$("#ago").onclick = async () => {
+  const mail = $("#amail").value.trim(), pass = $("#apass").value;
+  $("#aerr").textContent = "";
+  try {
+    if (signup) {
+      const nom = $("#anom").value.trim();
+      if (!nom) { $("#aerr").textContent = "Entrez votre nom."; return; }
+      const c = await createUserWithEmailAndPassword(auth, mail, pass);
+      profile = { nom, metier: "", tel: "" };
+      await setDoc(doc(db, "artisans", c.user.uid), { ...profile, email: c.user.email, createdAt: serverTimestamp() });
+      fillProfile();
+    } else {
+      await signInWithEmailAndPassword(auth, mail, pass);
+    }
+  } catch (e) { $("#aerr").textContent = errs[e.code] || "Erreur : " + e.code; }
+};
+$("#out").onclick = () => signOut(auth);
+
+onAuthStateChanged(auth, async u => {
+  user = u;
+  $("#auth").hidden = !!u;
+  $("#app").hidden = !u;
+  if (unsub) { unsub(); unsub = null; }
+  if (!u) { docs = []; return; }
+  const s = await getDoc(doc(db, "artisans", u.uid));
+  profile = s.exists() ? s.data() : {};
+  fillProfile();
+  unsub = onSnapshot(query(collection(db, "artisans", u.uid, "documents"), orderBy("createdAt", "desc")),
+    snap => { docs = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderList(); });
+  show("list");
+});
+
+/* ---------- Onglets ---------- */
+function show(v) {
+  ["list", "new", "prof"].forEach(k => $("#v-" + k).hidden = k !== v);
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+}
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => show(b.dataset.v));
+
+/* ---------- Profil ---------- */
+function fillProfile() {
+  $("#pn").value = profile.nom || "";
+  $("#pm").value = profile.metier || "";
+  $("#pt").value = profile.tel || "";
+  updPlan();
+}
+$("#psave").onclick = async () => {
+  const info = { nom: $("#pn").value.trim(), metier: $("#pm").value.trim(), tel: $("#pt").value.trim() };
+  await setDoc(doc(db, "artisans", user.uid), info, { merge: true });
+  profile = { ...profile, ...info };
+  $("#pmsg").textContent = "Profil enregistré.";
+};
+
+/* ---------- Nouveau document ---------- */
+function upTotal() { $("#tot").textContent = "Total : " + fmt(total(lines)); }
+function renderLines() {
+  $("#lines").innerHTML = lines.map((l, i) => `
+    <div class="card">
+      <input placeholder="Travaux ou article" value="${esc(l.d)}" data-i="${i}" data-k="d">
+      <div class="row">
+        <input type="number" inputmode="decimal" placeholder="Quantité" value="${l.q}" data-i="${i}" data-k="q">
+        <input type="number" inputmode="numeric" placeholder="Prix unitaire" value="${l.p || ""}" data-i="${i}" data-k="p">
+      </div>
+      ${lines.length > 1 ? `<button class="s" data-del="${i}">Supprimer la ligne</button>` : ""}
+    </div>`).join("");
+  upTotal();
+}
+$("#lines").addEventListener("input", e => {
+  const i = e.target.dataset.i, k = e.target.dataset.k;
+  if (i == null) return;
+  lines[i][k] = k === "d" ? e.target.value : +e.target.value || 0;
+  upTotal();
+});
+$("#lines").addEventListener("click", e => {
+  const i = e.target.dataset.del;
+  if (i == null) return;
+  lines.splice(i, 1); renderLines();
+});
+$("#addl").onclick = () => { lines.push({ d: "", q: 1, p: 0 }); renderLines(); };
+$("#save").onclick = async () => {
+  if (updPlan()) return;
+  const cn = $("#cn").value.trim(), ls = lines.filter(l => l.d.trim() && l.q > 0);
+  if (!cn || !ls.length) { alert("Ajoutez le nom du client et au moins une ligne avec un texte."); return; }
+  const type = $("#type").value;
+  await addDoc(collection(db, "artisans", user.uid, "documents"), {
+    type, numero: num(type), client: { nom: cn, tel: $("#ct").value.trim() },
+    lignes: ls, createdAt: serverTimestamp()
+  });
+  lines = [{ d: "", q: 1, p: 0 }];
+  $("#cn").value = ""; $("#ct").value = "";
+  renderLines(); show("list");
+};
+
+/* ---------- Liste ---------- */
+function renderList() {
+  updPlan();
+  $("#v-list").innerHTML = docs.length ? docs.map(d => `
+    <div class="card ${d.type === "facture" ? "f" : ""}">
+      <div class="top"><span>${d.type === "devis" ? "Devis" : "Facture"} ${esc(d.numero)}</span><span>${fmt(total(d.lignes))}</span></div>
+      <p>${esc(d.client.nom)}</p>
+      <p class="mute">${dateOf(d)}</p>
+      <div class="acts">
+        <button class="s" data-a="pdf" data-id="${d.id}">PDF / imprimer</button>
+        <button class="k" data-a="wa" data-id="${d.id}">WhatsApp</button>
+        ${d.type === "devis" ? `<button class="s" data-a="fac" data-id="${d.id}">Passer en facture</button>` : ""}
+        <button class="s" data-a="del" data-id="${d.id}">Supprimer</button>
+      </div>
+    </div>`).join("")
+    : `<p class="mute" style="margin-top:24px">Aucun document pour le moment. Appuyez sur « Nouveau » pour créer votre premier devis.</p>`;
+}
+$("#v-list").addEventListener("click", async e => {
+  const a = e.target.dataset.a, id = e.target.dataset.id;
+  if (!a) return;
+  const d = docs.find(x => x.id === id);
+  if (a === "pdf") pdf(d);
+  if (a === "wa") wa(d);
+  if (a === "fac" && confirm("Transformer ce devis en facture ?"))
+    await updateDoc(doc(db, "artisans", user.uid, "documents", id), { type: "facture", numero: num("facture") });
+  if (a === "del" && confirm("Supprimer ce document ?"))
+    await deleteDoc(doc(db, "artisans", user.uid, "documents", id));
+});
+
+/* ---------- PDF et WhatsApp ---------- */
+function pdf(d) {
+  const p = profile;
+  $("#print").innerHTML = `
+    <h1>${esc(p.nom)}</h1>
+    <p>${esc(p.metier)} ${p.tel ? "· Tél : " + esc(p.tel) : ""}</p>
+    <h2>${d.type === "devis" ? "DEVIS" : "FACTURE"} ${esc(d.numero)}</h2>
+    <p>Client : <b>${esc(d.client.nom)}</b> ${esc(d.client.tel)}<br>Date : ${dateOf(d)}</p>
+    <table>
+      <tr><th>Description</th><th class="r">Qté</th><th class="r">Prix unitaire</th><th class="r">Montant</th></tr>
+      ${d.lignes.map(l => `<tr><td>${esc(l.d)}</td><td class="r">${l.q}</td><td class="r">${fmt(l.p)}</td><td class="r">${fmt(l.q * l.p)}</td></tr>`).join("")}
+    </table>
+    <h3 style="text-align:right">Total : ${fmt(total(d.lignes))}</h3>`;
+  window.print();
+}
+function wa(d) {
+  const t = `${d.type === "devis" ? "Devis" : "Facture"} ${d.numero} – ${profile.nom || ""}\n`
+    + d.lignes.map(l => `• ${l.d} : ${l.q} x ${fmt(l.p)}`).join("\n")
+    + `\n\nTotal : ${fmt(total(d.lignes))}`;
+  let tel = (d.client.tel || "").replace(/\D/g, "");
+  if (tel.length === 8) tel = "226" + tel;
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(t)}`, "_blank");
+}
+
+renderLines();
+modeAuth();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
